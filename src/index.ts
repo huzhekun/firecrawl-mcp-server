@@ -30,6 +30,24 @@ function truncate(text: string, maxChars: number): string {
   return `${text.slice(0, maxChars)}\n\n...[truncated]`;
 }
 
+function paginateText(text: string, startIndex: number, maxChars: number): string {
+  if (!Number.isFinite(maxChars) || maxChars <= 0) return '';
+  const safeStartIndex = Math.max(0, Math.min(startIndex, text.length));
+  const endIndex = Math.min(safeStartIndex + maxChars, text.length);
+  const page = text.slice(safeStartIndex, endIndex);
+
+  const lines = [page];
+
+  if (endIndex < text.length) {
+    lines.push(
+      '',
+      `[Content truncated. Call read_url again with start_index=${endIndex} to continue.]`
+    );
+  }
+
+  return lines.join('\n');
+}
+
 function bodyExcerpt(body: string, max = 500): string {
   return body.length > max ? `${body.slice(0, max)}...` : body;
 }
@@ -201,9 +219,15 @@ function createMcpServer(): McpServer {
       inputSchema: {
         url: z.string().min(1),
         max_chars: z.number().int().positive().optional(),
+        start_index: z
+          .number()
+          .int()
+          .min(0)
+          .describe('Character index to start reading from. Use the continuation hint to fetch the next chunk.')
+          .optional(),
       },
     },
-    async ({ url, max_chars }) => {
+    async ({ url, max_chars, start_index }) => {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         throw new Error('Invalid URL: must start with http:// or https://');
       }
@@ -216,7 +240,7 @@ function createMcpServer(): McpServer {
 
       const result = await callFirecrawl('/v2/scrape', body);
       const maxChars = max_chars ?? MAX_OUTPUT_CHARS;
-      const text = truncate(formatReadMarkdown(result), maxChars);
+      const text = paginateText(formatReadMarkdown(result), start_index ?? 0, maxChars);
 
       return {
         content: [{ type: 'text', text }],

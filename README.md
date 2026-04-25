@@ -51,7 +51,12 @@ Read one URL as clean markdown.
 
 Input:
 - `url` (string, required, must start with `http://` or `https://`)
-- `max_chars` (number, optional)
+- `max_chars` (number, optional, default `MAX_OUTPUT_CHARS`)
+- `start_index` (number, optional, default `0`)
+
+Notes:
+- Use `start_index` with `max_chars` to read long pages in chunks.
+- If more content is available, the response includes the next `start_index`.
 
 ## Local Development
 
