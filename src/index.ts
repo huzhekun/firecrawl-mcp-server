@@ -161,7 +161,8 @@ function createMcpServer(): McpServer {
           .array(z.enum(SEARCH_SOURCES))
           .min(1)
           .max(3)
-          .describe('Result sources to search: web, news, and/or images. Defaults to web and news.'),
+          .describe('Result sources to search: web, news, and/or images. Defaults to web and news.')
+          .optional(),
         include_content: z.boolean().optional(),
       },
     },
