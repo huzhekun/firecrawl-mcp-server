@@ -13,6 +13,7 @@ Designed for low token usage by keeping tool schemas and descriptions short.
 - Streamable HTTP transport on `POST /mcp` (required)
 - Optional stdio mode via `MCP_TRANSPORT=stdio`
 - Health check at `GET /healthz`
+- Readiness probe at `GET /readyz` and liveness probe at `GET /livez`
 - Firecrawl request timeout (60s)
 - Output truncation via `MAX_OUTPUT_CHARS`
 - Dockerized, non-root runtime image
@@ -25,6 +26,8 @@ Designed for low token usage by keeping tool schemas and descriptions short.
 - `MAX_OUTPUT_CHARS` (optional, default: `20000`)
 - `DEFAULT_SEARCH_LIMIT` (optional, default: `5`)
 - `MCP_TRANSPORT` (optional: `http` or `stdio`, default: `http`)
+- `HOST` (optional, default: `0.0.0.0`)
+- `SHUTDOWN_GRACE_MS` (optional, default: `10000`)
 
 ## Tools
 
@@ -100,6 +103,27 @@ Health:
 ```bash
 curl -s http://localhost:3000/healthz
 ```
+
+Readiness:
+
+```bash
+curl -s http://localhost:3000/readyz
+```
+
+Liveness:
+
+```bash
+curl -s http://localhost:3000/livez
+```
+
+## Kubernetes notes
+
+- The app now exposes:
+  - `/livez` (liveness)
+  - `/readyz` (readiness)
+  - `/healthz` (general health alias)
+- On `SIGTERM`/`SIGINT`, the service marks itself unready and gracefully closes the HTTP server before exit.
+- Both container images include a Docker `HEALTHCHECK` that calls `/readyz`.
 
 Search (direct Firecrawl endpoint sanity check):
 

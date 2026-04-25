@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import express, { type Request, type Response } from 'express';
+import { createServer, type Server as HttpServer } from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -12,6 +13,8 @@ const MAX_OUTPUT_CHARS = Number(process.env.MAX_OUTPUT_CHARS ?? 20000);
 const DEFAULT_SEARCH_LIMIT = Number(process.env.DEFAULT_SEARCH_LIMIT ?? 5);
 const REQUEST_TIMEOUT_MS = 60_000;
 const TRANSPORT = process.env.MCP_TRANSPORT ?? 'http';
+const HOST = process.env.HOST ?? '0.0.0.0';
+const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS ?? 10_000);
 
 if (!FIRECRAWL_API_KEY) {
   console.error('FIRECRAWL_API_KEY is required');
@@ -193,10 +196,22 @@ function createMcpServer(): McpServer {
 
 async function runHttpServer(): Promise<void> {
   const app = express();
+  let isShuttingDown = false;
+  const startedAt = new Date().toISOString();
+
+  app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
 
-  app.get('/healthz', (_req, res) => {
-    res.json({ ok: true });
+  app.get(['/healthz', '/health', '/livez'], (_req, res) => {
+    res.status(200).json({ ok: true, status: 'live', transport: TRANSPORT, startedAt });
+  });
+
+  app.get('/readyz', (_req, res) => {
+    if (isShuttingDown) {
+      return res.status(503).json({ ok: false, status: 'shutting_down' });
+    }
+
+    return res.status(200).json({ ok: true, status: 'ready' });
   });
 
   app.post('/mcp', async (req: Request, res: Response) => {
@@ -238,8 +253,56 @@ async function runHttpServer(): Promise<void> {
   app.get('/mcp', methodNotAllowed);
   app.delete('/mcp', methodNotAllowed);
 
-  app.listen(PORT, () => {
-    console.log(`firecrawl-lite MCP listening on :${PORT}`);
+  const httpServer: HttpServer = createServer(app);
+
+  httpServer.keepAliveTimeout = 61_000;
+  httpServer.headersTimeout = 65_000;
+
+  const closeHttpServer = () =>
+    new Promise<void>((resolve, reject) => {
+      httpServer.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down...`);
+
+    const forceExitTimer = setTimeout(() => {
+      console.error(`Forced shutdown after ${SHUTDOWN_GRACE_MS}ms`);
+      process.exit(1);
+    }, SHUTDOWN_GRACE_MS);
+
+    forceExitTimer.unref();
+
+    try {
+      await closeHttpServer();
+      console.log('HTTP server closed gracefully');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error while shutting down HTTP server:', error);
+      process.exit(1);
+    } finally {
+      clearTimeout(forceExitTimer);
+    }
+  };
+
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
+
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`firecrawl-lite MCP listening on ${HOST}:${PORT}`);
   });
 }
 
