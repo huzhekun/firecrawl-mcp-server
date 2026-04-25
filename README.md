@@ -37,11 +37,14 @@ Search the web and return concise markdown results.
 Input:
 - `query` (string, required)
 - `limit` (number, optional, max 10)
+- `sources` (array of `web`, `news`, `images`; optional, default `["web", "news"]`)
 - `include_content` (boolean, optional, default true)
 
 Notes:
 - If `include_content=true`, sends Firecrawl `scrapeOptions` requesting markdown.
 - If `include_content=false`, sends basic search request without scrape options.
+- Images are opt-in because image results are usually token-heavier.
+- Supports Firecrawl v2 search responses such as `data.web`, `data.news`, and `data.images`.
 
 ### `read_url`
 Read one URL as clean markdown.

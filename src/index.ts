@@ -11,10 +11,13 @@ const FIRECRAWL_BASE_URL = process.env.FIRECRAWL_BASE_URL ?? 'https://api.firecr
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
 const MAX_OUTPUT_CHARS = Number(process.env.MAX_OUTPUT_CHARS ?? 20000);
 const DEFAULT_SEARCH_LIMIT = Number(process.env.DEFAULT_SEARCH_LIMIT ?? 5);
+const DEFAULT_SEARCH_SOURCES = ['web', 'news'] as const;
+const SEARCH_SOURCES = ['web', 'news', 'images'] as const;
 const REQUEST_TIMEOUT_MS = 60_000;
 const TRANSPORT = process.env.MCP_TRANSPORT ?? 'http';
 const HOST = process.env.HOST ?? '0.0.0.0';
 const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS ?? 10_000);
+type SearchSource = (typeof SEARCH_SOURCES)[number];
 
 if (!FIRECRAWL_API_KEY) {
   console.error('FIRECRAWL_API_KEY is required');
@@ -31,10 +34,32 @@ function bodyExcerpt(body: string, max = 500): string {
   return body.length > max ? `${body.slice(0, max)}...` : body;
 }
 
-function getSearchItems(payload: any): any[] {
+function getSearchItems(payload: any, sources: readonly SearchSource[]): any[] {
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.results)) return payload.results;
   if (Array.isArray(payload?.data?.results)) return payload.data.results;
+
+  const sourceBuckets = payload?.data;
+  if (sourceBuckets && typeof sourceBuckets === 'object') {
+    const items: any[] = [];
+
+    for (const source of sources) {
+      if (Array.isArray(sourceBuckets[source])) {
+        items.push(...sourceBuckets[source]);
+      }
+    }
+
+    return items.filter(
+      (item, index, array) =>
+        array.findIndex(
+          (candidate) =>
+            candidate?.url === item?.url &&
+            candidate?.title === item?.title &&
+            candidate?.description === item?.description
+        ) === index
+    );
+  }
+
   return [];
 }
 
@@ -128,20 +153,27 @@ function createMcpServer(): McpServer {
   server.registerTool(
     'web_search',
     {
-      description: 'Search the web and return concise markdown results.',
+      description: 'Return web search results. Defaults to web and news; request images only when needed.',
       inputSchema: {
         query: z.string().min(1),
         limit: z.number().int().min(1).max(10).optional(),
+        sources: z
+          .array(z.enum(SEARCH_SOURCES))
+          .min(1)
+          .max(3)
+          .describe('Result sources to search: web, news, and/or images. Defaults to web and news.'),
         include_content: z.boolean().optional(),
       },
     },
-    async ({ query, limit, include_content }) => {
+    async ({ query, limit, sources, include_content }) => {
       const finalLimit = Math.max(1, Math.min(limit ?? DEFAULT_SEARCH_LIMIT, 10));
       const includeContent = include_content ?? true;
+      const finalSources = sources ?? [...DEFAULT_SEARCH_SOURCES];
 
       const body: Record<string, unknown> = {
         query,
         limit: finalLimit,
+        sources: finalSources,
       };
 
       if (includeContent) {
@@ -152,7 +184,7 @@ function createMcpServer(): McpServer {
       }
 
       const result = await callFirecrawl('/v2/search', body);
-      const items = getSearchItems(result);
+      const items = getSearchItems(result, finalSources);
       const text = truncate(formatSearchMarkdown(items, includeContent), MAX_OUTPUT_CHARS);
 
       return {
