@@ -1,9 +1,10 @@
 # minimal-firecrawl-mcp
 
-Tiny remote MCP server backed by Firecrawl with exactly two tools:
+Tiny remote MCP server backed by Firecrawl with three tools:
 
 - `web_search`
 - `read_url`
+- `current_time`
 
 Designed for low token usage by keeping tool schemas and descriptions short.
 
@@ -57,6 +58,19 @@ Input:
 Notes:
 - Use `start_index` with `max_chars` to read long pages in chunks.
 - If more content is available, the response includes the next `start_index`.
+
+### `current_time`
+Get the current time including date.
+
+Input:
+- `time_zone` (string, optional, IANA time zone like `America/Los_Angeles`, default `UTC`)
+
+Returns:
+- Time in requested zone plus UTC reference
+- Example:
+  - `Current time (America/Los_Angeles): 2026-04-26T09:45:12 (GMT-7)`
+  - `Day: Sunday`
+  - `UTC: 2026-04-26T16:45:12.345Z`
 
 ## Local Development
 

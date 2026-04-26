@@ -1,7 +1,7 @@
 {
   "name": "minimal-firecrawl-mcp",
   "version": "0.1.0",
-  "description": "Tiny Firecrawl-backed MCP server with only web_search and read_url tools",
+  "description": "Tiny Firecrawl-backed MCP server with web_search, read_url, and current_time tools",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

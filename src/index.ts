@@ -248,6 +248,63 @@ function createMcpServer(): McpServer {
     }
   );
 
+  server.registerTool(
+    'current_time',
+    {
+      description: 'Get the current date and time.',
+      inputSchema: {
+        time_zone: z
+          .string()
+          .min(1)
+          .describe('Optional IANA time zone, e.g. America/Los_Angeles.')
+          .optional(),
+      },
+    },
+    async ({ time_zone }) => {
+      const now = new Date();
+      const timeZone = time_zone ?? 'UTC';
+
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone }).format(now);
+      } catch {
+        throw new Error(`Invalid time_zone: ${timeZone}`);
+      }
+
+      const dateTime = new Intl.DateTimeFormat('sv-SE', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      })
+        .format(now)
+        .replace(' ', 'T');
+
+      const weekday = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        weekday: 'long',
+      }).format(now);
+
+      const offset =
+        new Intl.DateTimeFormat('en-US', {
+          timeZone,
+          timeZoneName: 'shortOffset',
+          hour: '2-digit',
+        })
+          .formatToParts(now)
+          .find((part) => part.type === 'timeZoneName')?.value ?? 'UTC';
+
+      const text = `Current time (${timeZone}): ${dateTime} (${offset})\nDay: ${weekday}\nUTC: ${now.toISOString()}`;
+
+      return {
+        content: [{ type: 'text', text }],
+      };
+    }
+  );
+
   return server;
 }
 
